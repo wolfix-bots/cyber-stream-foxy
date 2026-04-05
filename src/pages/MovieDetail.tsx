@@ -3,7 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useParams, useNavigate } from "react-router-dom";
 import {
   Play, Star, Clock, Globe, Languages, Film, ChevronDown, ChevronUp,
-  ArrowLeft, Loader2, AlertCircle, Tv, ChevronRight
+  ArrowLeft, Loader2, AlertCircle, Tv, ChevronRight, X
 } from "lucide-react";
 import { api, formatDuration } from "@/lib/api";
 import type { Stream } from "@/lib/api";
@@ -396,26 +396,39 @@ const MovieDetail = () => {
         </div>
       </div>
 
-      {/* Video Player */}
+      {/* Video Player — fullscreen popup modal */}
       {showPlayer && streams.length > 0 && (
-        <div className="max-w-5xl mx-auto px-4 py-6">
-          <div className="border border-neon-cyan/20 rounded-sm overflow-hidden shadow-neon-subtle">
-            <div className="bg-dark-surface px-4 py-3 flex items-center justify-between">
-              <span className="font-display text-sm text-neon-cyan tracking-wider">
-                NOW PLAYING: {movie.title}
-                {isTV ? ` S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}` : ""}
-              </span>
-              <div className="flex gap-2">
-                {streams.map((s) => (
-                  <span
-                    key={s.quality}
-                    className="px-2 py-0.5 text-xs font-display border border-border text-muted-foreground rounded-sm"
-                  >
-                    {s.quality}
-                  </span>
-                ))}
-              </div>
+        <div
+          className="fixed inset-0 z-[9999] bg-black flex flex-col"
+          style={{ animation: "fadeIn 0.2s ease" }}
+        >
+          {/* Modal header */}
+          <div className="flex items-center justify-between px-4 py-3 bg-black/80 border-b border-neon-cyan/20 flex-shrink-0">
+            <div className="min-w-0 flex-1">
+              <p className="font-display text-xs tracking-widest text-neon-cyan">NOW PLAYING</p>
+              <p className="font-body text-sm text-white truncate">
+                {movie.title}
+                {isTV ? ` — S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}` : ""}
+              </p>
             </div>
+            <div className="flex items-center gap-3 flex-shrink-0 ml-4">
+              {streams.map((s) => (
+                <span key={s.quality} className="px-2 py-0.5 text-xs font-display border border-white/20 text-white/50 rounded-sm hidden sm:inline">
+                  {s.quality}
+                </span>
+              ))}
+              <button
+                onClick={() => setShowPlayer(false)}
+                className="p-2 text-white/70 hover:text-red-400 transition-colors"
+                aria-label="Close player"
+              >
+                <X className="w-5 h-5" />
+              </button>
+            </div>
+          </div>
+
+          {/* Video centered vertically */}
+          <div className="flex-1 flex items-center bg-black">
             <VideoPlayer
               streams={streams}
               title={movie.title}

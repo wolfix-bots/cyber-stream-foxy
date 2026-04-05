@@ -47,12 +47,9 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
   const [loadProgress, setLoadProgress] = useState(0);
   const [canPlay, setCanPlay] = useState(false);
   const [autoUpgraded, setAutoUpgraded] = useState(false);
-
-  // Captions
   const [captionTracks, setCaptionTracks] = useState<CaptionTrack[]>([]);
-  const [activeCaptionIdx, setActiveCaptionIdx] = useState<number>(-1); // -1 = off
+  const [activeCaptionIdx, setActiveCaptionIdx] = useState<number>(-1);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
-
   const controlsTimer = useRef<ReturnType<typeof setTimeout>>();
   const bufferCheckTimer = useRef<ReturnType<typeof setInterval>>();
 
@@ -65,7 +62,19 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
     setLoadProgress(0);
   }, [streams]);
 
-  // Fetch captions from xcasper when streamId is available
+  // Listen for native fullscreen exit (back button on Android etc.)
+  useEffect(() => {
+    const onFsChange = () => {
+      if (!document.fullscreenElement) {
+        setFullscreen(false);
+        // Release orientation lock when leaving fullscreen
+        try { (screen.orientation as { unlock?: () => void }).unlock?.(); } catch {}
+      }
+    };
+    document.addEventListener("fullscreenchange", onFsChange);
+    return () => document.removeEventListener("fullscreenchange", onFsChange);
+  }, []);
+
   useEffect(() => {
     if (!subjectId || !streamId) return;
     api.getCaptions(subjectId, streamId)
@@ -73,13 +82,11 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
         // eslint-disable-next-line @typescript-eslint/no-explicit-any
         const data = (res as any).data;
         const tracks: CaptionTrack[] = [];
-        // Handle: data.subtitleList[{languageName, subtitleUrl}]
         if (Array.isArray(data?.subtitleList)) {
           data.subtitleList.forEach((s: { languageName?: string; subtitleUrl?: string }) => {
             if (s.subtitleUrl) tracks.push({ language: s.languageName || "Unknown", url: s.subtitleUrl });
           });
         }
-        // Handle: data.subtitles[{language, url}]
         if (Array.isArray(data?.subtitles)) {
           data.subtitles.forEach((s: { language?: string; url?: string }) => {
             if (s.url) tracks.push({ language: s.language || "Unknown", url: s.url });
@@ -87,10 +94,9 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
         }
         if (tracks.length) setCaptionTracks(tracks);
       })
-      .catch(() => {}); // Silently fail — captions are optional
+      .catch(() => {});
   }, [subjectId, streamId]);
 
-  // Apply active caption track to the video element
   useEffect(() => {
     const video = videoRef.current;
     if (!video) return;
@@ -120,7 +126,6 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
     return () => clearInterval(bufferCheckTimer.current);
   }, [updateBuffered]);
 
-  // Auto-upgrade to best quality once buffered enough
   useEffect(() => {
     if (!autoUpgraded && canPlay && buffered >= 15) {
       const best = streams.find(s => s.quality === "1080p") || streams.find(s => s.quality === "720p");
@@ -177,11 +182,21 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
     setMuted(!muted);
   };
 
-  const toggleFullscreen = () => {
+  const toggleFullscreen = async () => {
     if (!containerRef.current) return;
-    if (!fullscreen) containerRef.current.requestFullscreen();
-    else document.exitFullscreen();
-    setFullscreen(!fullscreen);
+    if (!fullscreen) {
+      await containerRef.current.requestFullscreen();
+      setFullscreen(true);
+      // Lock to landscape on mobile — lets the video fill the screen
+      try {
+        await (screen.orientation as { lock?: (o: string) => Promise<void> }).lock?.("landscape");
+      } catch { /* not supported on desktop/some browsers */ }
+    } else {
+      // Unlock orientation before exiting fullscreen
+      try { (screen.orientation as { unlock?: () => void }).unlock?.(); } catch {}
+      await document.exitFullscreen();
+      setFullscreen(false);
+    }
   };
 
   const showControlsTemporarily = () => {
@@ -221,12 +236,11 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
   return (
     <div
       ref={containerRef}
-      className="relative w-full bg-background rounded-sm overflow-hidden group"
+      className="relative w-full bg-black overflow-hidden"
       style={{ aspectRatio: "16/9" }}
       onMouseMove={showControlsTemporarily}
       onClick={() => setShowControls(true)}
     >
-      {/* Video */}
       <video
         ref={videoRef}
         src={selectedStream?.proxyUrl}
@@ -242,8 +256,8 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
         onProgress={updateBuffered}
         onClick={togglePlay}
         crossOrigin="anonymous"
+        playsInline
       >
-        {/* Caption tracks loaded from xcasper */}
         {captionTracks.map((track, i) => (
           <track
             key={i}
@@ -256,21 +270,16 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
         ))}
       </video>
 
-      {/* Loading / Buffering state */}
+      {/* Buffering overlay */}
       {loading && (
-        <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/60 gap-3">
+        <div className="absolute inset-0 flex flex-col items-center justify-center bg-black/70 gap-3">
           <div className="relative w-16 h-16">
             <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r="28" fill="none" stroke="hsl(var(--border))" strokeWidth="3" />
-              <circle
-                cx="32" cy="32" r="28"
-                fill="none"
-                stroke="hsl(var(--neon-cyan))"
-                strokeWidth="3"
+              <circle cx="32" cy="32" r="28" fill="none" stroke="hsl(var(--neon-cyan))" strokeWidth="3"
                 strokeDasharray={`${2 * Math.PI * 28}`}
                 strokeDashoffset={`${2 * Math.PI * 28 * (1 - loadProgress / 100)}`}
-                strokeLinecap="round"
-                className="transition-all duration-500"
+                strokeLinecap="round" className="transition-all duration-500"
               />
             </svg>
             <div className="absolute inset-0 flex items-center justify-center">
@@ -278,85 +287,61 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
             </div>
           </div>
           <p className="font-display text-xs tracking-widest text-muted-foreground">
-            {loadProgress < 5 ? "CONNECTING..." : loadProgress < 100 ? "BUFFERING..." : "LOADING..."}
+            {loadProgress < 5 ? "CONNECTING..." : "BUFFERING..."}
           </p>
-          {!autoUpgraded && selectedStream && (
-            <p className="font-display text-xs text-muted-foreground/60">
-              Starting at {selectedStream.quality} · upgrading quality soon
-            </p>
-          )}
         </div>
       )}
 
       {/* Controls overlay */}
       <div className={`absolute inset-0 flex flex-col justify-end transition-opacity duration-300 ${showControls ? "opacity-100" : "opacity-0"}`}>
-        <div className="absolute inset-0 bg-gradient-to-t from-background/90 via-transparent to-background/20 pointer-events-none" />
+        <div className="absolute inset-0 bg-gradient-to-t from-black/90 via-transparent to-black/30 pointer-events-none" />
 
         {/* Top bar */}
-        <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4">
+        <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-3">
           <div className="flex items-center gap-2 min-w-0">
-            <span className="font-display text-sm text-foreground truncate mr-4">{title}</span>
+            <span className="font-display text-sm text-white truncate">{title}</span>
             {canPlay && !loading && (
-              <div className="flex items-center gap-1 text-xs text-neon-cyan/60 font-display flex-shrink-0">
+              <div className="flex items-center gap-1 text-xs text-neon-cyan/70 font-display flex-shrink-0">
                 <Wifi className="w-3 h-3" />
                 <span>{Math.round(buffered)}%</span>
               </div>
             )}
           </div>
-          <div className="flex items-center gap-2">
-            {/* Quality selector */}
+          <div className="flex items-center gap-1.5">
+            {/* Quality */}
             <div className="relative">
-              <button
-                onClick={() => { setShowQuality(!showQuality); setShowCaptionMenu(false); }}
-                className="flex items-center gap-1 px-2 py-1 text-xs font-display border border-border rounded-sm hover:border-primary transition-colors"
-              >
+              <button onClick={() => { setShowQuality(!showQuality); setShowCaptionMenu(false); }}
+                className="flex items-center gap-1 px-2 py-1 text-xs font-display border border-white/30 rounded-sm hover:border-neon-cyan text-white transition-colors">
                 <Settings className="w-3 h-3" />
                 {selectedStream?.quality}
               </button>
               {showQuality && (
-                <div className="absolute top-full right-0 mt-1 bg-dark-surface border border-border rounded-sm overflow-hidden z-10 min-w-36">
+                <div className="absolute top-full right-0 mt-1 bg-black/90 border border-white/20 rounded-sm overflow-hidden z-10 min-w-28">
                   {streams.map((s) => (
-                    <button
-                      key={s.quality}
-                      onClick={() => changeQuality(s)}
-                      className={`w-full text-left px-3 py-2 text-xs font-body hover:bg-dark-elevated transition-colors ${s.quality === selectedStream?.quality ? "text-neon-cyan" : "text-foreground"}`}
-                    >
-                      <span className="font-semibold">{s.quality}</span>
-                      {formatFileSize(s.size) && (
-                        <span className="ml-2 text-muted-foreground">{formatFileSize(s.size)}</span>
-                      )}
+                    <button key={s.quality} onClick={() => changeQuality(s)}
+                      className={`w-full text-left px-3 py-2 text-xs font-body hover:bg-white/10 transition-colors ${s.quality === selectedStream?.quality ? "text-neon-cyan" : "text-white"}`}>
+                      {s.quality}
+                      {formatFileSize(s.size) && <span className="ml-2 text-white/50">{formatFileSize(s.size)}</span>}
                     </button>
                   ))}
                 </div>
               )}
             </div>
 
-            {/* Captions / CC button */}
+            {/* CC */}
             {captionTracks.length > 0 && (
               <div className="relative">
-                <button
-                  onClick={() => { setShowCaptionMenu(!showCaptionMenu); setShowQuality(false); }}
-                  className={`p-1 transition-colors ${captionsOn ? "text-neon-cyan" : "text-muted-foreground hover:text-foreground"}`}
-                  title="Captions"
-                >
+                <button onClick={() => { setShowCaptionMenu(!showCaptionMenu); setShowQuality(false); }}
+                  className={`p-1.5 transition-colors ${captionsOn ? "text-neon-cyan" : "text-white/70 hover:text-white"}`} title="Captions">
                   {captionsOn ? <Captions className="w-4 h-4" /> : <CaptionsOff className="w-4 h-4" />}
                 </button>
                 {showCaptionMenu && (
-                  <div className="absolute top-full right-0 mt-1 bg-dark-surface border border-border rounded-sm overflow-hidden z-10 min-w-36">
-                    <button
-                      onClick={() => { setActiveCaptionIdx(-1); setShowCaptionMenu(false); }}
-                      className={`w-full text-left px-3 py-2 text-xs font-body hover:bg-dark-elevated transition-colors ${activeCaptionIdx === -1 ? "text-neon-cyan" : "text-foreground"}`}
-                    >
-                      Off
-                    </button>
-                    {captionTracks.map((track, i) => (
-                      <button
-                        key={i}
-                        onClick={() => { setActiveCaptionIdx(i); setShowCaptionMenu(false); }}
-                        className={`w-full text-left px-3 py-2 text-xs font-body hover:bg-dark-elevated transition-colors ${activeCaptionIdx === i ? "text-neon-cyan" : "text-foreground"}`}
-                      >
-                        {track.language}
-                      </button>
+                  <div className="absolute top-full right-0 mt-1 bg-black/90 border border-white/20 rounded-sm overflow-hidden z-10 min-w-28">
+                    <button onClick={() => { setActiveCaptionIdx(-1); setShowCaptionMenu(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${activeCaptionIdx === -1 ? "text-neon-cyan" : "text-white"}`}>Off</button>
+                    {captionTracks.map((t, i) => (
+                      <button key={i} onClick={() => { setActiveCaptionIdx(i); setShowCaptionMenu(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs hover:bg-white/10 ${activeCaptionIdx === i ? "text-neon-cyan" : "text-white"}`}>{t.language}</button>
                     ))}
                   </div>
                 )}
@@ -364,19 +349,13 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
             )}
 
             {/* Download */}
-            <a
-              href={selectedStream?.downloadUrl}
-              download={downloadFilename}
-              target="_blank"
-              rel="noreferrer"
-              className="p-1 text-muted-foreground hover:text-neon-cyan transition-colors"
-              title={`Download ${downloadFilename}`}
-            >
+            <a href={selectedStream?.downloadUrl} download={downloadFilename} target="_blank" rel="noreferrer"
+              className="p-1.5 text-white/70 hover:text-neon-cyan transition-colors" title={`Download ${downloadFilename}`}>
               <Download className="w-4 h-4" />
             </a>
 
             {onClose && (
-              <button onClick={onClose} className="p-1 text-muted-foreground hover:text-destructive transition-colors">
+              <button onClick={onClose} className="p-1.5 text-white/70 hover:text-red-400 transition-colors">
                 <X className="w-4 h-4" />
               </button>
             )}
@@ -384,49 +363,35 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
         </div>
 
         {/* Bottom controls */}
-        <div className="relative p-4 space-y-2">
+        <div className="relative p-3 space-y-2">
           {/* Progress bar */}
-          <div className="relative w-full h-3 flex items-center group/seek">
-            <div className="absolute w-full h-1 bg-border rounded-full" />
-            <div className="absolute h-1 bg-neon-cyan/20 rounded-full transition-all duration-500" style={{ width: `${buffered}%` }} />
-            <div className="absolute h-1 rounded-full transition-none" style={{ width: `${progressPct}%`, background: "hsl(var(--primary))" }} />
-            <input
-              type="range"
-              min={0}
-              max={duration || 100}
-              step={0.1}
-              value={currentTime}
-              onChange={handleSeek}
-              className="absolute w-full h-3 opacity-0 cursor-pointer"
-            />
-            <div className="absolute w-3 h-3 rounded-full bg-primary shadow-neon-subtle pointer-events-none transition-none" style={{ left: `calc(${progressPct}% - 6px)` }} />
+          <div className="relative w-full h-3 flex items-center">
+            <div className="absolute w-full h-1 bg-white/20 rounded-full" />
+            <div className="absolute h-1 bg-neon-cyan/30 rounded-full transition-all duration-500" style={{ width: `${buffered}%` }} />
+            <div className="absolute h-1 rounded-full" style={{ width: `${progressPct}%`, background: "hsl(var(--primary))" }} />
+            <input type="range" min={0} max={duration || 100} step={0.1} value={currentTime} onChange={handleSeek}
+              className="absolute w-full h-3 opacity-0 cursor-pointer" />
+            <div className="absolute w-3 h-3 rounded-full bg-primary pointer-events-none" style={{ left: `calc(${progressPct}% - 6px)` }} />
           </div>
 
           {/* Controls row */}
           <div className="flex items-center justify-between">
             <div className="flex items-center gap-3">
-              <button onClick={togglePlay} className="text-foreground hover:text-neon-cyan transition-colors">
+              <button onClick={togglePlay} className="text-white hover:text-neon-cyan transition-colors">
                 {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
               </button>
               <div className="flex items-center gap-2">
-                <button onClick={toggleMute} className="text-foreground hover:text-neon-cyan transition-colors">
+                <button onClick={toggleMute} className="text-white hover:text-neon-cyan transition-colors">
                   {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
                 </button>
-                <input
-                  type="range"
-                  min={0}
-                  max={1}
-                  step={0.05}
-                  value={muted ? 0 : volume}
-                  onChange={handleVolume}
-                  className="w-16 h-1 appearance-none bg-border rounded-full cursor-pointer accent-primary"
-                />
+                <input type="range" min={0} max={1} step={0.05} value={muted ? 0 : volume} onChange={handleVolume}
+                  className="w-16 h-1 appearance-none bg-white/20 rounded-full cursor-pointer accent-primary" />
               </div>
-              <span className="text-xs font-display text-muted-foreground">
+              <span className="text-xs font-display text-white/70">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
             </div>
-            <button onClick={toggleFullscreen} className="text-foreground hover:text-neon-cyan transition-colors">
+            <button onClick={toggleFullscreen} className="text-white hover:text-neon-cyan transition-colors">
               {fullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
             </button>
           </div>

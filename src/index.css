@@ -211,3 +211,8 @@
 video::-webkit-media-controls {
   display: none !important;
 }
+
+@keyframes fadeIn {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
