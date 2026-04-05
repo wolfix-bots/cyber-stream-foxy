@@ -101,15 +101,15 @@ export const api = {
     return fetcher(`${BASE_URL}/captions?subjectId=${subjectId}&streamId=${streamId}`);
   },
 
-  // Build bff/stream URLs with correct xcasper params:
+  // Build bff/stream URLs — param order matches xcasper's confirmed working format:
   //   movies: ?subjectId=...&resolution=360&lang=En
   //   TV:     ?subjectId=...&se=1&ep=1&resolution=360&lang=En
   getStreams: (subjectId: string, season?: number, episode?: number): { streams: Stream[]; streamId: null } => {
-    const tvParams = season != null && episode != null
-      ? `&se=${season}&ep=${episode}`
-      : "";
+    const isTV = season != null && episode != null;
     const streams = QUALITIES.map((q) => {
-      const url = `${BFF_BASE}?subjectId=${subjectId}&resolution=${RES_MAP[q]}&lang=En${tvParams}`;
+      let url = `${BFF_BASE}?subjectId=${subjectId}`;
+      if (isTV) url += `&se=${season}&ep=${episode}`;
+      url += `&resolution=${RES_MAP[q]}&lang=En`;
       return {
         quality: q,
         format: "mp4",
