@@ -1,0 +1,7 @@
+project_id = "nghtponadglntkklmukp"
+
+[functions.series-info]
+verify_jwt = false
+
+[functions.movie-chat]
+verify_jwt = false
