@@ -13,6 +13,9 @@ interface VideoPlayerProps {
   title: string;
   subjectId?: string;
   streamId?: string;
+  isTV?: boolean;
+  season?: number;
+  episode?: number;
   onClose?: () => void;
 }
 
@@ -21,7 +24,10 @@ const sortedByQualityAsc = (streams: Stream[]): Stream[] => {
   return [...streams].sort((a, b) => (order[a.quality] ?? 99) - (order[b.quality] ?? 99));
 };
 
-const VideoPlayer = ({ streams, title, subjectId, streamId, onClose }: VideoPlayerProps) => {
+const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episode, onClose }: VideoPlayerProps) => {
+  const downloadFilename = isTV && season != null && episode != null
+    ? `${title} S${String(season).padStart(2, "0")}E${String(episode).padStart(2, "0")}.mp4`
+    : `${title}.mp4`;
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -360,11 +366,11 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, onClose }: VideoPlay
             {/* Download */}
             <a
               href={selectedStream?.downloadUrl}
-              download
+              download={downloadFilename}
               target="_blank"
               rel="noreferrer"
               className="p-1 text-muted-foreground hover:text-neon-cyan transition-colors"
-              title="Download"
+              title={`Download ${downloadFilename}`}
             >
               <Download className="w-4 h-4" />
             </a>

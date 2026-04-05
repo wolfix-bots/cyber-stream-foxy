@@ -59,24 +59,53 @@ const MovieDetail = () => {
   const recommended = recommendData?.data?.subjectList || [];
   const isTV = movie?.subjectType === 2;
 
-  // Fetch series info once we know it's a TV show
+  // Fetch series info — TVMaze (accurate DB) first, Supabase AI as fallback
   useEffect(() => {
     if (!isTV || !movie?.title || seriesInfo || loadingSeriesInfo) return;
     setLoadingSeriesInfo(true);
-    fetch(`${SUPABASE_URL}/functions/v1/series-info`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        title: movie.title,
-        year: movie.releaseDate?.split("-")[0],
-      }),
-    })
-      .then((r) => r.json())
-      .then((res) => {
-        if (res.data?.seasons) setSeriesInfo(res.data);
-      })
-      .catch(console.error)
-      .finally(() => setLoadingSeriesInfo(false));
+
+    const fetchInfo = async () => {
+      const title = movie.title;
+      const year = movie.releaseDate?.split("-")[0];
+
+      // 1. TVMaze — free, CORS-enabled, 100% accurate episode counts
+      try {
+        const searchRes = await fetch(
+          `https://api.tvmaze.com/singlesearch/shows?q=${encodeURIComponent(title)}`
+        );
+        if (searchRes.ok) {
+          const show = await searchRes.json();
+          const epRes = await fetch(`https://api.tvmaze.com/shows/${show.id}/episodes`);
+          if (epRes.ok) {
+            const episodes: { season: number; number: number }[] = await epRes.json();
+            const seasonMap = new Map<number, number>();
+            episodes.forEach((ep) => {
+              seasonMap.set(ep.season, (seasonMap.get(ep.season) || 0) + 1);
+            });
+            const seasons: SeasonInfo[] = Array.from(seasonMap.entries())
+              .map(([s, count]) => ({ season: s, episodeCount: count }))
+              .sort((a, b) => a.season - b.season);
+            if (seasons.length) {
+              setSeriesInfo({ seasons, totalSeasons: seasons.length, status: show.status || "Ended" });
+              return;
+            }
+          }
+        }
+      } catch { /* fall through to AI */ }
+
+      // 2. Fallback — Supabase AI deep research
+      try {
+        const res = await fetch(`${SUPABASE_URL}/functions/v1/series-info`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ title, year }),
+        });
+        const data = await res.json();
+        if (data?.data?.seasons) setSeriesInfo(data.data);
+      } catch { /* no info available */ }
+    };
+
+    fetchInfo().finally(() => setLoadingSeriesInfo(false));
   }, [isTV, movie?.title, movie?.releaseDate, seriesInfo, loadingSeriesInfo]);
 
   // Current season's episode count
@@ -395,6 +424,9 @@ const MovieDetail = () => {
               title={movie.title}
               subjectId={movie.subjectId}
               streamId={streamId ?? undefined}
+              isTV={isTV}
+              season={isTV ? season : undefined}
+              episode={isTV ? episode : undefined}
               onClose={() => setShowPlayer(false)}
             />
           </div>
