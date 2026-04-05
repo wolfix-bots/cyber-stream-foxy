@@ -30,6 +30,7 @@ const MovieDetail = () => {
   const navigate = useNavigate();
   const [showPlayer, setShowPlayer] = useState(false);
   const [streams, setStreams] = useState<Stream[]>([]);
+  const [loadingStreams, setLoadingStreams] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [expandDesc, setExpandDesc] = useState(false);
 
@@ -82,20 +83,23 @@ const MovieDetail = () => {
   const episodeCount = currentSeasonInfo?.episodeCount ?? 50;
   const totalSeasons = seriesInfo?.totalSeasons ?? 20;
 
-  const handleWatch = () => {
+  const handleWatch = async () => {
     if (!movie) return;
+    setLoadingStreams(true);
     setStreamError(null);
     try {
-      const built = api.getStreams(
+      const fetched = await api.getStreams(
         movie.subjectId,
         isTV ? season : undefined,
         isTV ? episode : undefined
       );
-      setStreams(built);
+      setStreams(fetched);
       setShowPlayer(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to load streams";
       setStreamError(msg);
+    } finally {
+      setLoadingStreams(false);
     }
   };
 
@@ -323,10 +327,11 @@ const MovieDetail = () => {
               <div className="flex flex-wrap items-center gap-3">
                 <button
                   onClick={handleWatch}
-                  className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground font-display text-sm tracking-wider rounded-sm hover:shadow-neon-cyan hover:scale-105 transition-all clip-cyber"
+                  disabled={loadingStreams}
+                  className="flex items-center gap-2 px-6 py-2.5 bg-primary text-primary-foreground font-display text-sm tracking-wider rounded-sm hover:shadow-neon-cyan hover:scale-105 transition-all disabled:opacity-60 disabled:cursor-not-allowed clip-cyber"
                 >
-                  <Play className="w-4 h-4 fill-current" />
-                  WATCH NOW
+                  {loadingStreams ? <Loader2 className="w-4 h-4 animate-spin" /> : <Play className="w-4 h-4 fill-current" />}
+                  {loadingStreams ? "LOADING..." : "WATCH NOW"}
                 </button>
 
                 {movie.trailer?.videoAddress?.url && (

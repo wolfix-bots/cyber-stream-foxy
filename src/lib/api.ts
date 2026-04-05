@@ -1,5 +1,4 @@
 const BASE_URL = "https://movieapi.xcasper.space/api";
-const BFF_BASE = "https://movieapi.xcasper.space/api/bff/stream";
 
 export interface MovieSubject {
   subjectId: string;
@@ -53,14 +52,6 @@ export interface LatestItem {
   thumbnail: string;
 }
 
-const RES_MAP: Record<string, string> = {
-  "360p": "360",
-  "480p": "480",
-  "720p": "720",
-  "1080p": "1080",
-};
-const QUALITIES = ["360p", "480p", "720p", "1080p"];
-
 const fetcher = async <T>(url: string): Promise<T> => {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -100,20 +91,13 @@ export const api = {
     return fetcher(`${BASE_URL}/captions?subjectId=${subjectId}&streamId=${streamId}`);
   },
 
-  // Build bff stream URLs directly from subjectId — no search needed
-  getStreams: (subjectId: string, season?: number, episode?: number): Stream[] => {
-    const tvParams = season != null && episode != null ? `&season=${season}&episode=${episode}` : "";
-    return QUALITIES.map((q) => {
-      const url = `${BFF_BASE}?subjectId=${subjectId}&resolution=${RES_MAP[q]}${tvParams}`;
-      return {
-        quality: q,
-        format: "mp4",
-        size: "",
-        duration: 0,
-        proxyUrl: url,
-        downloadUrl: url,
-      };
-    });
+  // Fetch real CDN stream URLs via xcasper /api/play — returns proxyUrl per quality
+  getStreams: async (subjectId: string, season?: number, episode?: number): Promise<Stream[]> => {
+    let url = `${BASE_URL}/play?subjectId=${subjectId}`;
+    if (season != null && episode != null) url += `&season=${season}&episode=${episode}`;
+    const res: { data: { streams: Stream[] } } = await fetcher(url);
+    if (!res.data?.streams?.length) throw new Error("No streams available");
+    return res.data.streams;
   },
 };
 
