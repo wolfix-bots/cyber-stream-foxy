@@ -113,24 +113,21 @@ const MovieDetail = () => {
   const episodeCount = currentSeasonInfo?.episodeCount ?? 50;
   const totalSeasons = seriesInfo?.totalSeasons ?? 20;
 
-  const handleWatch = async () => {
+  const handleWatch = () => {
     if (!movie) return;
-    setLoadingStreams(true);
     setStreamError(null);
     try {
-      const { streams: fetched, streamId: sid } = await api.getStreams(
+      const { streams: built, streamId: sid } = api.getStreams(
         movie.subjectId,
         isTV ? season : undefined,
         isTV ? episode : undefined
       );
-      setStreams(fetched);
+      setStreams(built);
       setStreamId(sid);
       setShowPlayer(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to load streams";
       setStreamError(msg);
-    } finally {
-      setLoadingStreams(false);
     }
   };
 

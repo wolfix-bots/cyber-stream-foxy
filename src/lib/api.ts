@@ -1,4 +1,5 @@
 const BASE_URL = "https://movieapi.xcasper.space/api";
+const BFF_BASE = "https://movieapi.xcasper.space/api/bff/stream";
 
 export interface MovieSubject {
   subjectId: string;
@@ -52,6 +53,15 @@ export interface LatestItem {
   thumbnail: string;
 }
 
+// xcasper resolution map — no trailing "p"
+const RES_MAP: Record<string, string> = {
+  "360p": "360",
+  "480p": "480",
+  "720p": "720",
+  "1080p": "1080",
+};
+const QUALITIES = ["360p", "480p", "720p", "1080p"];
+
 const fetcher = async <T>(url: string): Promise<T> => {
   const res = await fetch(url);
   if (!res.ok) throw new Error(`API error: ${res.status}`);
@@ -91,16 +101,25 @@ export const api = {
     return fetcher(`${BASE_URL}/captions?subjectId=${subjectId}&streamId=${streamId}`);
   },
 
-  // Fetch real CDN stream URLs via xcasper /api/play — returns proxyUrl per quality + streamId for captions
-  getStreams: async (subjectId: string, season?: number, episode?: number): Promise<{ streams: Stream[]; streamId: string | null }> => {
-    let url = `${BASE_URL}/play?subjectId=${subjectId}`;
-    if (season != null && episode != null) url += `&season=${season}&episode=${episode}`;
-    const res: { data: { streams: Stream[]; streamId?: string } } = await fetcher(url);
-    if (!res.data?.streams?.length) throw new Error("No streams available");
-    return {
-      streams: res.data.streams,
-      streamId: res.data.streamId ?? null,
-    };
+  // Build bff/stream URLs with correct xcasper params:
+  //   movies: ?subjectId=...&resolution=360&lang=En
+  //   TV:     ?subjectId=...&se=1&ep=1&resolution=360&lang=En
+  getStreams: (subjectId: string, season?: number, episode?: number): { streams: Stream[]; streamId: null } => {
+    const tvParams = season != null && episode != null
+      ? `&se=${season}&ep=${episode}`
+      : "";
+    const streams = QUALITIES.map((q) => {
+      const url = `${BFF_BASE}?subjectId=${subjectId}&resolution=${RES_MAP[q]}&lang=En${tvParams}`;
+      return {
+        quality: q,
+        format: "mp4",
+        size: "",
+        duration: 0,
+        proxyUrl: url,
+        downloadUrl: url,
+      };
+    });
+    return { streams, streamId: null };
   },
 };
 
