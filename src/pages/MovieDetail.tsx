@@ -30,6 +30,7 @@ const MovieDetail = () => {
   const navigate = useNavigate();
   const [showPlayer, setShowPlayer] = useState(false);
   const [streams, setStreams] = useState<Stream[]>([]);
+  const [streamId, setStreamId] = useState<string | null>(null);
   const [loadingStreams, setLoadingStreams] = useState(false);
   const [streamError, setStreamError] = useState<string | null>(null);
   const [expandDesc, setExpandDesc] = useState(false);
@@ -88,12 +89,13 @@ const MovieDetail = () => {
     setLoadingStreams(true);
     setStreamError(null);
     try {
-      const fetched = await api.getStreams(
+      const { streams: fetched, streamId: sid } = await api.getStreams(
         movie.subjectId,
         isTV ? season : undefined,
         isTV ? episode : undefined
       );
       setStreams(fetched);
+      setStreamId(sid);
       setShowPlayer(true);
     } catch (e: unknown) {
       const msg = e instanceof Error ? e.message : "Failed to load streams";
@@ -391,6 +393,8 @@ const MovieDetail = () => {
             <VideoPlayer
               streams={streams}
               title={movie.title}
+              subjectId={movie.subjectId}
+              streamId={streamId ?? undefined}
               onClose={() => setShowPlayer(false)}
             />
           </div>

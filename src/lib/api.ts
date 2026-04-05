@@ -91,13 +91,16 @@ export const api = {
     return fetcher(`${BASE_URL}/captions?subjectId=${subjectId}&streamId=${streamId}`);
   },
 
-  // Fetch real CDN stream URLs via xcasper /api/play — returns proxyUrl per quality
-  getStreams: async (subjectId: string, season?: number, episode?: number): Promise<Stream[]> => {
+  // Fetch real CDN stream URLs via xcasper /api/play — returns proxyUrl per quality + streamId for captions
+  getStreams: async (subjectId: string, season?: number, episode?: number): Promise<{ streams: Stream[]; streamId: string | null }> => {
     let url = `${BASE_URL}/play?subjectId=${subjectId}`;
     if (season != null && episode != null) url += `&season=${season}&episode=${episode}`;
-    const res: { data: { streams: Stream[] } } = await fetcher(url);
+    const res: { data: { streams: Stream[]; streamId?: string } } = await fetcher(url);
     if (!res.data?.streams?.length) throw new Error("No streams available");
-    return res.data.streams;
+    return {
+      streams: res.data.streams,
+      streamId: res.data.streamId ?? null,
+    };
   },
 };
 

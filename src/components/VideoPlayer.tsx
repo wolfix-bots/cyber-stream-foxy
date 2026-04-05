@@ -1,21 +1,27 @@
 import { useState, useRef, useEffect, useCallback } from "react";
-import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Download, X, Wifi } from "lucide-react";
+import { Play, Pause, Volume2, VolumeX, Maximize, Minimize, Settings, Download, X, Wifi, Captions, CaptionsOff } from "lucide-react";
 import type { Stream } from "@/lib/api";
-import { formatFileSize } from "@/lib/api";
+import { api, formatFileSize } from "@/lib/api";
+
+interface CaptionTrack {
+  language: string;
+  url: string;
+}
 
 interface VideoPlayerProps {
   streams: Stream[];
   title: string;
+  subjectId?: string;
+  streamId?: string;
   onClose?: () => void;
 }
 
-// Sort streams: lowest quality first so playback starts fast, user can upgrade
 const sortedByQualityAsc = (streams: Stream[]): Stream[] => {
   const order: Record<string, number> = { "360p": 1, "480p": 2, "720p": 3, "1080p": 4, "4K": 5 };
   return [...streams].sort((a, b) => (order[a.quality] ?? 99) - (order[b.quality] ?? 99));
 };
 
-const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
+const VideoPlayer = ({ streams, title, subjectId, streamId, onClose }: VideoPlayerProps) => {
   const videoRef = useRef<HTMLVideoElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [playing, setPlaying] = useState(false);
@@ -23,23 +29,27 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
   const [volume, setVolume] = useState(1);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(0);
-  const [buffered, setBuffered] = useState(0); // 0-100 percent buffered ahead
+  const [buffered, setBuffered] = useState(0);
   const [fullscreen, setFullscreen] = useState(false);
   const [showControls, setShowControls] = useState(true);
   const [selectedStream, setSelectedStream] = useState<Stream>(() => {
-    // Start with lowest quality for fastest initial load
     const sorted = sortedByQualityAsc(streams);
     return sorted[0] ?? streams[0];
   });
   const [showQuality, setShowQuality] = useState(false);
   const [loading, setLoading] = useState(true);
-  const [loadProgress, setLoadProgress] = useState(0); // 0-100 download progress
+  const [loadProgress, setLoadProgress] = useState(0);
   const [canPlay, setCanPlay] = useState(false);
   const [autoUpgraded, setAutoUpgraded] = useState(false);
+
+  // Captions
+  const [captionTracks, setCaptionTracks] = useState<CaptionTrack[]>([]);
+  const [activeCaptionIdx, setActiveCaptionIdx] = useState<number>(-1); // -1 = off
+  const [showCaptionMenu, setShowCaptionMenu] = useState(false);
+
   const controlsTimer = useRef<ReturnType<typeof setTimeout>>();
   const bufferCheckTimer = useRef<ReturnType<typeof setInterval>>();
 
-  // Pick best startup stream (lowest quality = fastest start)
   useEffect(() => {
     const sorted = sortedByQualityAsc(streams);
     setSelectedStream(sorted[0] ?? streams[0]);
@@ -49,7 +59,41 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
     setLoadProgress(0);
   }, [streams]);
 
-  // Poll the video's buffered ranges to update progress UI
+  // Fetch captions from xcasper when streamId is available
+  useEffect(() => {
+    if (!subjectId || !streamId) return;
+    api.getCaptions(subjectId, streamId)
+      .then((res) => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        const data = (res as any).data;
+        const tracks: CaptionTrack[] = [];
+        // Handle: data.subtitleList[{languageName, subtitleUrl}]
+        if (Array.isArray(data?.subtitleList)) {
+          data.subtitleList.forEach((s: { languageName?: string; subtitleUrl?: string }) => {
+            if (s.subtitleUrl) tracks.push({ language: s.languageName || "Unknown", url: s.subtitleUrl });
+          });
+        }
+        // Handle: data.subtitles[{language, url}]
+        if (Array.isArray(data?.subtitles)) {
+          data.subtitles.forEach((s: { language?: string; url?: string }) => {
+            if (s.url) tracks.push({ language: s.language || "Unknown", url: s.url });
+          });
+        }
+        if (tracks.length) setCaptionTracks(tracks);
+      })
+      .catch(() => {}); // Silently fail — captions are optional
+  }, [subjectId, streamId]);
+
+  // Apply active caption track to the video element
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video) return;
+    const tracks = video.textTracks;
+    for (let i = 0; i < tracks.length; i++) {
+      tracks[i].mode = i === activeCaptionIdx ? "showing" : "hidden";
+    }
+  }, [activeCaptionIdx]);
+
   const updateBuffered = useCallback(() => {
     const video = videoRef.current;
     if (!video || !video.duration) return;
@@ -70,7 +114,7 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
     return () => clearInterval(bufferCheckTimer.current);
   }, [updateBuffered]);
 
-  // Auto-upgrade to best available quality once enough is buffered (>15%)
+  // Auto-upgrade to best quality once buffered enough
   useEffect(() => {
     if (!autoUpgraded && canPlay && buffered >= 15) {
       const best = streams.find(s => s.quality === "1080p") || streams.find(s => s.quality === "720p");
@@ -87,7 +131,7 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
           }
         }, 400);
       } else {
-        setAutoUpgraded(true); // already best quality
+        setAutoUpgraded(true);
       }
     }
   }, [autoUpgraded, canPlay, buffered, streams, selectedStream.quality, playing]);
@@ -129,11 +173,8 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
 
   const toggleFullscreen = () => {
     if (!containerRef.current) return;
-    if (!fullscreen) {
-      containerRef.current.requestFullscreen();
-    } else {
-      document.exitFullscreen();
-    }
+    if (!fullscreen) containerRef.current.requestFullscreen();
+    else document.exitFullscreen();
     setFullscreen(!fullscreen);
   };
 
@@ -159,7 +200,7 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
     setSelectedStream(stream);
     setLoading(true);
     setShowQuality(false);
-    setAutoUpgraded(true); // manual selection = don't auto-upgrade
+    setAutoUpgraded(true);
     setTimeout(() => {
       if (videoRef.current) {
         videoRef.current.currentTime = currentT;
@@ -169,6 +210,7 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
   };
 
   const progressPct = duration > 0 ? (currentTime / duration) * 100 : 0;
+  const captionsOn = activeCaptionIdx >= 0;
 
   return (
     <div
@@ -178,7 +220,7 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
       onMouseMove={showControlsTemporarily}
       onClick={() => setShowControls(true)}
     >
-      {/* Video — preload=metadata gets playback started without downloading entire file */}
+      {/* Video */}
       <video
         ref={videoRef}
         src={selectedStream?.proxyUrl}
@@ -194,12 +236,23 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
         onProgress={updateBuffered}
         onClick={togglePlay}
         crossOrigin="anonymous"
-      />
+      >
+        {/* Caption tracks loaded from xcasper */}
+        {captionTracks.map((track, i) => (
+          <track
+            key={i}
+            kind="subtitles"
+            src={track.url}
+            label={track.language}
+            srcLang={track.language.slice(0, 2).toLowerCase()}
+            default={i === activeCaptionIdx}
+          />
+        ))}
+      </video>
 
       {/* Loading / Buffering state */}
       {loading && (
         <div className="absolute inset-0 flex flex-col items-center justify-center bg-background/60 gap-3">
-          {/* Animated buffer ring */}
           <div className="relative w-16 h-16">
             <svg className="w-16 h-16 -rotate-90" viewBox="0 0 64 64">
               <circle cx="32" cy="32" r="28" fill="none" stroke="hsl(var(--border))" strokeWidth="3" />
@@ -237,7 +290,6 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
         <div className="absolute top-0 left-0 right-0 flex items-center justify-between p-4">
           <div className="flex items-center gap-2 min-w-0">
             <span className="font-display text-sm text-foreground truncate mr-4">{title}</span>
-            {/* Live buffer indicator */}
             {canPlay && !loading && (
               <div className="flex items-center gap-1 text-xs text-neon-cyan/60 font-display flex-shrink-0">
                 <Wifi className="w-3 h-3" />
@@ -249,7 +301,7 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
             {/* Quality selector */}
             <div className="relative">
               <button
-                onClick={() => setShowQuality(!showQuality)}
+                onClick={() => { setShowQuality(!showQuality); setShowCaptionMenu(false); }}
                 className="flex items-center gap-1 px-2 py-1 text-xs font-display border border-border rounded-sm hover:border-primary transition-colors"
               >
                 <Settings className="w-3 h-3" />
@@ -273,10 +325,44 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
               )}
             </div>
 
+            {/* Captions / CC button */}
+            {captionTracks.length > 0 && (
+              <div className="relative">
+                <button
+                  onClick={() => { setShowCaptionMenu(!showCaptionMenu); setShowQuality(false); }}
+                  className={`p-1 transition-colors ${captionsOn ? "text-neon-cyan" : "text-muted-foreground hover:text-foreground"}`}
+                  title="Captions"
+                >
+                  {captionsOn ? <Captions className="w-4 h-4" /> : <CaptionsOff className="w-4 h-4" />}
+                </button>
+                {showCaptionMenu && (
+                  <div className="absolute top-full right-0 mt-1 bg-dark-surface border border-border rounded-sm overflow-hidden z-10 min-w-36">
+                    <button
+                      onClick={() => { setActiveCaptionIdx(-1); setShowCaptionMenu(false); }}
+                      className={`w-full text-left px-3 py-2 text-xs font-body hover:bg-dark-elevated transition-colors ${activeCaptionIdx === -1 ? "text-neon-cyan" : "text-foreground"}`}
+                    >
+                      Off
+                    </button>
+                    {captionTracks.map((track, i) => (
+                      <button
+                        key={i}
+                        onClick={() => { setActiveCaptionIdx(i); setShowCaptionMenu(false); }}
+                        className={`w-full text-left px-3 py-2 text-xs font-body hover:bg-dark-elevated transition-colors ${activeCaptionIdx === i ? "text-neon-cyan" : "text-foreground"}`}
+                      >
+                        {track.language}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* Download */}
             <a
               href={selectedStream?.downloadUrl}
               download
+              target="_blank"
+              rel="noreferrer"
               className="p-1 text-muted-foreground hover:text-neon-cyan transition-colors"
               title="Download"
             >
@@ -293,24 +379,11 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
 
         {/* Bottom controls */}
         <div className="relative p-4 space-y-2">
-          {/* Progress bar with buffered layer */}
+          {/* Progress bar */}
           <div className="relative w-full h-3 flex items-center group/seek">
-            {/* Track background */}
             <div className="absolute w-full h-1 bg-border rounded-full" />
-            {/* Buffered layer */}
-            <div
-              className="absolute h-1 bg-neon-cyan/20 rounded-full transition-all duration-500"
-              style={{ width: `${buffered}%` }}
-            />
-            {/* Played layer */}
-            <div
-              className="absolute h-1 rounded-full transition-none"
-              style={{
-                width: `${progressPct}%`,
-                background: "hsl(var(--primary))"
-              }}
-            />
-            {/* Seek input (invisible, on top) */}
+            <div className="absolute h-1 bg-neon-cyan/20 rounded-full transition-all duration-500" style={{ width: `${buffered}%` }} />
+            <div className="absolute h-1 rounded-full transition-none" style={{ width: `${progressPct}%`, background: "hsl(var(--primary))" }} />
             <input
               type="range"
               min={0}
@@ -320,11 +393,7 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
               onChange={handleSeek}
               className="absolute w-full h-3 opacity-0 cursor-pointer"
             />
-            {/* Thumb */}
-            <div
-              className="absolute w-3 h-3 rounded-full bg-primary shadow-neon-subtle pointer-events-none transition-none"
-              style={{ left: `calc(${progressPct}% - 6px)` }}
-            />
+            <div className="absolute w-3 h-3 rounded-full bg-primary shadow-neon-subtle pointer-events-none transition-none" style={{ left: `calc(${progressPct}% - 6px)` }} />
           </div>
 
           {/* Controls row */}
@@ -333,7 +402,6 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
               <button onClick={togglePlay} className="text-foreground hover:text-neon-cyan transition-colors">
                 {playing ? <Pause className="w-5 h-5" /> : <Play className="w-5 h-5" />}
               </button>
-
               <div className="flex items-center gap-2">
                 <button onClick={toggleMute} className="text-foreground hover:text-neon-cyan transition-colors">
                   {muted ? <VolumeX className="w-4 h-4" /> : <Volume2 className="w-4 h-4" />}
@@ -348,12 +416,10 @@ const VideoPlayer = ({ streams, title, onClose }: VideoPlayerProps) => {
                   className="w-16 h-1 appearance-none bg-border rounded-full cursor-pointer accent-primary"
                 />
               </div>
-
               <span className="text-xs font-display text-muted-foreground">
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
             </div>
-
             <button onClick={toggleFullscreen} className="text-foreground hover:text-neon-cyan transition-colors">
               {fullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
             </button>
