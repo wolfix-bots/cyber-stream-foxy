@@ -101,24 +101,32 @@ export const api = {
     return fetcher(`${BASE_URL}/captions?subjectId=${subjectId}&streamId=${streamId}`);
   },
 
-  // Build bff/stream URLs — param order matches xcasper's confirmed working format:
-  //   movies: ?subjectId=...&resolution=360&lang=En
+  // Build bff/stream URLs — format differs between movies and TV:
+  //   movies: ?subjectId=...                      (auto/no resolution)
+  //           ?subjectId=...&resolution=360        (quality pick — NO lang)
   //   TV:     ?subjectId=...&se=1&ep=1&resolution=360&lang=En
   getStreams: (subjectId: string, season?: number, episode?: number): { streams: Stream[]; streamId: null } => {
     const isTV = season != null && episode != null;
-    const streams = QUALITIES.map((q) => {
-      let url = `${BFF_BASE}?subjectId=${subjectId}`;
-      if (isTV) url += `&se=${season}&ep=${episode}`;
-      url += `&resolution=${RES_MAP[q]}&lang=En`;
-      return {
-        quality: q,
-        format: "mp4",
-        size: "",
-        duration: 0,
-        proxyUrl: url,
-        downloadUrl: url,
-      };
-    });
+    let streams: Stream[];
+
+    if (isTV) {
+      // TV: se/ep before resolution, always include lang=En
+      streams = QUALITIES.map((q) => {
+        const url = `${BFF_BASE}?subjectId=${subjectId}&se=${season}&ep=${episode}&resolution=${RES_MAP[q]}&lang=En`;
+        return { quality: q, format: "mp4", size: "", duration: 0, proxyUrl: url, downloadUrl: url };
+      });
+    } else {
+      // Movies: base URL (auto) + quality variants with resolution only, no lang
+      const base = `${BFF_BASE}?subjectId=${subjectId}`;
+      streams = [
+        { quality: "Auto", format: "mp4", size: "", duration: 0, proxyUrl: base, downloadUrl: base },
+        ...QUALITIES.map((q) => {
+          const url = `${base}&resolution=${RES_MAP[q]}`;
+          return { quality: q, format: "mp4", size: "", duration: 0, proxyUrl: url, downloadUrl: url };
+        }),
+      ];
+    }
+
     return { streams, streamId: null };
   },
 };
