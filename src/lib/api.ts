@@ -101,14 +101,15 @@ export const api = {
     return fetcher(`${BASE_URL}/captions?subjectId=${subjectId}&streamId=${streamId}`);
   },
 
-  // Both movies and TV use identical bff/stream format:
-  //   ?subjectId=...&se=S&ep=E&resolution=360&lang=En
-  // Movies always use se=1&ep=1; TV uses the selected season/episode.
+  // bff/stream URL format:
+  //   TV:    ?subjectId=...&se=S&ep=E&resolution=360&lang=En
+  //   Movie: ?subjectId=...&resolution=360&lang=En  (no se/ep)
   getStreams: (subjectId: string, season?: number, episode?: number): { streams: Stream[]; streamId: null } => {
-    const se = season ?? 1;
-    const ep = episode ?? 1;
+    const isTV = season != null && episode != null;
     const streams = QUALITIES.map((q) => {
-      const url = `${BFF_BASE}?subjectId=${subjectId}&se=${se}&ep=${ep}&resolution=${RES_MAP[q]}&lang=En`;
+      let url = `${BFF_BASE}?subjectId=${subjectId}`;
+      if (isTV) url += `&se=${season}&ep=${episode}`;
+      url += `&resolution=${RES_MAP[q]}&lang=En`;
       return { quality: q, format: "mp4", size: "", duration: 0, proxyUrl: url, downloadUrl: url };
     });
     return { streams, streamId: null };
