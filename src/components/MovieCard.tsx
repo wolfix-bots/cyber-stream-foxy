@@ -1,14 +1,14 @@
 import { Link } from "react-router-dom";
-import { Play, Star, Clock, Tv } from "lucide-react";
+import { Play, Star, Tv } from "lucide-react";
 import type { MovieSubject } from "@/lib/api";
-import { formatDuration } from "@/lib/api";
 
 interface MovieCardProps {
   movie: MovieSubject;
   size?: "sm" | "md" | "lg";
+  rank?: number;
 }
 
-const MovieCard = ({ movie, size = "md" }: MovieCardProps) => {
+const MovieCard = ({ movie, size = "md", rank }: MovieCardProps) => {
   const isTV = movie.subjectType === 2;
 
   const sizeClasses = {
@@ -44,26 +44,33 @@ const MovieCard = ({ movie, size = "md" }: MovieCardProps) => {
             </div>
           )}
 
-          {/* Overlay on hover */}
+          {/* Hover play overlay */}
           <div className="absolute inset-0 bg-background/60 opacity-0 group-hover:opacity-100 transition-opacity duration-300 flex items-center justify-center">
             <div className="w-12 h-12 rounded-full bg-primary/20 border border-primary flex items-center justify-center glow-cyan">
               <Play className="w-5 h-5 text-neon-cyan fill-current ml-0.5" />
             </div>
           </div>
 
-          {/* Top badges */}
+          {/* Top-left badges */}
           <div className="absolute top-2 left-2 flex gap-1">
-            {isTV && (
-              <span className="px-1.5 py-0.5 text-xs font-display bg-accent/80 text-accent-foreground rounded-sm">
-                TV
-              </span>
-            )}
+            <span className={`px-1.5 py-0.5 text-xs font-display rounded-sm ${isTV ? "bg-accent/80 text-accent-foreground" : "bg-primary/70 text-primary-foreground"}`}>
+              {isTV ? "TV" : "MOVIE"}
+            </span>
             {movie.corner && (
-              <span className="px-1.5 py-0.5 text-xs font-display bg-primary/80 text-primary-foreground rounded-sm">
+              <span className="px-1.5 py-0.5 text-xs font-display bg-neon-yellow/80 text-black rounded-sm">
                 {movie.corner}
               </span>
             )}
           </div>
+
+          {/* Rank badge — top left number overlay */}
+          {rank != null && (
+            <div className="absolute bottom-2 left-2">
+              <span className="font-display text-5xl font-black leading-none text-white/20 select-none stroke-text">
+                {rank}
+              </span>
+            </div>
+          )}
 
           {/* Rating badge */}
           {movie.imdbRatingValue && parseFloat(movie.imdbRatingValue) > 0 && (
@@ -82,16 +89,10 @@ const MovieCard = ({ movie, size = "md" }: MovieCardProps) => {
           <h3 className="text-sm font-body font-semibold text-foreground truncate group-hover:text-neon-cyan transition-colors">
             {movie.title}
           </h3>
-          <div className="flex items-center gap-2 mt-1">
+          <div className="flex items-center gap-2 mt-0.5">
             {movie.releaseDate && (
               <span className="text-xs text-muted-foreground">
                 {new Date(movie.releaseDate).getFullYear()}
-              </span>
-            )}
-            {movie.duration > 0 && (
-              <span className="flex items-center gap-0.5 text-xs text-muted-foreground">
-                <Clock className="w-2.5 h-2.5" />
-                {formatDuration(movie.duration)}
               </span>
             )}
           </div>

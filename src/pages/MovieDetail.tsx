@@ -29,6 +29,7 @@ const MovieDetail = () => {
   const { id } = useParams<{ id: string }>();
   const navigate = useNavigate();
   const [showPlayer, setShowPlayer] = useState(false);
+  const [showTrailer, setShowTrailer] = useState(false);
   const [streams, setStreams] = useState<Stream[]>([]);
   const [streamId, setStreamId] = useState<string | null>(null);
   const [loadingStreams, setLoadingStreams] = useState(false);
@@ -363,15 +364,13 @@ const MovieDetail = () => {
                 </button>
 
                 {movie.trailer?.videoAddress?.url && (
-                  <a
-                    href={movie.trailer.videoAddress.url}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="flex items-center gap-2 px-4 py-2.5 border border-border text-foreground font-display text-xs tracking-wider rounded-sm hover:border-primary hover:text-neon-cyan transition-all"
+                  <button
+                    onClick={() => setShowTrailer(true)}
+                    className="flex items-center gap-2 px-4 py-2.5 border border-border text-foreground font-display text-xs tracking-wider rounded-sm hover:border-neon-magenta hover:text-neon-magenta transition-all"
                   >
                     <Film className="w-4 h-4" />
                     TRAILER
-                  </a>
+                  </button>
                 )}
               </div>
 
@@ -443,23 +442,54 @@ const MovieDetail = () => {
         </div>
       )}
 
+      {/* Trailer modal */}
+      {showTrailer && movie.trailer?.videoAddress?.url && (
+        <div
+          className="fixed inset-0 z-[9999] bg-black/95 flex flex-col"
+          style={{ animation: "fadeIn 0.2s ease" }}
+        >
+          <div className="flex items-center justify-between px-4 py-3 bg-black/80 border-b border-neon-magenta/20 flex-shrink-0">
+            <div>
+              <p className="font-display text-xs tracking-widest text-neon-magenta">TRAILER</p>
+              <p className="font-body text-sm text-white truncate">{movie.title}</p>
+            </div>
+            <button
+              onClick={() => setShowTrailer(false)}
+              className="p-2 text-white/70 hover:text-neon-magenta transition-colors"
+              aria-label="Close trailer"
+            >
+              <X className="w-5 h-5" />
+            </button>
+          </div>
+          <div className="flex-1 flex items-center justify-center bg-black p-4">
+            <video
+              src={movie.trailer.videoAddress.url}
+              controls
+              autoPlay
+              className="w-full max-w-4xl max-h-full rounded-sm"
+              style={{ aspectRatio: "16/9" }}
+            />
+          </div>
+        </div>
+      )}
+
       {/* Cast */}
       {movie.staffList && movie.staffList.length > 0 && (
         <div className="max-w-7xl mx-auto px-4 py-6">
-          <h2 className="font-display text-sm font-bold tracking-widest text-neon-cyan mb-4">CAST & CREW</h2>
-          <div className="flex gap-4 overflow-x-auto hide-scrollbar pb-2">
-            {movie.staffList.slice(0, 12).map((staff, i) => (
-              <div key={i} className="flex-shrink-0 text-center w-20">
-                <div className="w-16 h-16 mx-auto rounded-sm cyber-border overflow-hidden bg-dark-elevated">
+          <h2 className="font-display text-sm font-bold tracking-widest text-neon-cyan mb-4">TOP CAST</h2>
+          <div className="flex gap-5 overflow-x-auto hide-scrollbar pb-2">
+            {movie.staffList.slice(0, 15).map((staff, i) => (
+              <div key={i} className="flex-shrink-0 text-center w-24">
+                <div className="w-20 h-20 mx-auto rounded-full overflow-hidden border-2 border-border hover:border-neon-cyan transition-colors bg-dark-elevated">
                   {staff.avatar?.url ? (
                     <img src={staff.avatar.url} alt={staff.name} className="w-full h-full object-cover" />
                   ) : (
-                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-xs font-display">
+                    <div className="w-full h-full flex items-center justify-center text-muted-foreground text-lg font-display font-bold">
                       {staff.name?.charAt(0)}
                     </div>
                   )}
                 </div>
-                <p className="text-xs font-body text-foreground mt-1 truncate">{staff.name}</p>
+                <p className="text-xs font-body font-semibold text-foreground mt-2 truncate">{staff.name}</p>
                 <p className="text-xs text-muted-foreground truncate">{staff.role}</p>
               </div>
             ))}

@@ -104,7 +104,7 @@ const Index = () => {
           <MovieRow title="📺 HOT SERIES" subtitle="Binge-worthy shows right now" movies={hotTV} accentColor="magenta" />
         )}
         {trending.length > 0 && (
-          <MovieRow title="⚡ TRENDING" subtitle="Most watched this week" movies={trending} accentColor="cyan" />
+          <MovieRow title="⚡ TRENDING" subtitle="Most watched this week" movies={trending} accentColor="cyan" showRank />
         )}
 
         {/* AI-curated genre rows — appear progressively as they load */}

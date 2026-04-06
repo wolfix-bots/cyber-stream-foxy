@@ -9,21 +9,20 @@ interface MovieRowProps {
   movies: MovieSubject[];
   accentColor?: "cyan" | "magenta";
   autoScroll?: boolean;
+  showRank?: boolean;
 }
 
-const MovieRow = ({ title, subtitle, movies, accentColor = "cyan", autoScroll = true }: MovieRowProps) => {
+const MovieRow = ({ title, subtitle, movies, accentColor = "cyan", autoScroll = true, showRank = false }: MovieRowProps) => {
   const rowRef = useRef<HTMLDivElement>(null);
   const isPaused = useRef(false);
 
   const scroll = (direction: "left" | "right") => {
     if (!rowRef.current) return;
     isPaused.current = true;
-    // Resume auto-scroll after 8s of manual interaction
     setTimeout(() => { isPaused.current = false; }, 8000);
     rowRef.current.scrollBy({ left: direction === "right" ? 400 : -400, behavior: "smooth" });
   };
 
-  // Auto-scroll every 3.5 seconds — rewinds to start when it reaches the end
   useEffect(() => {
     if (!autoScroll) return;
     const timer = setInterval(() => {
@@ -38,7 +37,6 @@ const MovieRow = ({ title, subtitle, movies, accentColor = "cyan", autoScroll = 
     return () => clearInterval(timer);
   }, [autoScroll]);
 
-  // Pause auto-scroll on hover/touch
   const handleMouseEnter = () => { isPaused.current = true; };
   const handleMouseLeave = () => { isPaused.current = false; };
 
@@ -75,8 +73,8 @@ const MovieRow = ({ title, subtitle, movies, accentColor = "cyan", autoScroll = 
         onTouchStart={handleMouseEnter}
         onTouchEnd={() => { setTimeout(() => { isPaused.current = false; }, 5000); }}
       >
-        {movies.map((movie) => (
-          <MovieCard key={movie.subjectId} movie={movie} size="md" />
+        {movies.map((movie, i) => (
+          <MovieCard key={movie.subjectId} movie={movie} size="md" rank={showRank ? i + 1 : undefined} />
         ))}
       </div>
     </section>
