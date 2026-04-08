@@ -418,6 +418,11 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
               <Download className="w-4 h-4" />
             </a>
 
+            {/* Fullscreen */}
+            <button onClick={toggleFullscreen} className="p-1.5 text-white/70 hover:text-neon-cyan transition-colors" title="Fullscreen">
+              {fullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
+            </button>
+
             {onClose && (
               <button onClick={onClose} className="p-1.5 text-white/70 hover:text-red-400 transition-colors">
                 <X className="w-4 h-4" />
@@ -455,9 +460,7 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
                 {formatTime(currentTime)} / {formatTime(duration)}
               </span>
             </div>
-            <button onClick={toggleFullscreen} className="text-white hover:text-neon-cyan transition-colors">
-              {fullscreen ? <Minimize className="w-4 h-4" /> : <Maximize className="w-4 h-4" />}
-            </button>
+
           </div>
         </div>
       </div>
