@@ -245,7 +245,8 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
         ref={videoRef}
         src={selectedStream?.proxyUrl}
         className="w-full h-full object-contain"
-        preload="metadata"
+        preload="auto"
+        autoPlay
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onWaiting={() => setLoading(true)}
