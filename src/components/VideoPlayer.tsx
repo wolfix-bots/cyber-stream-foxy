@@ -254,16 +254,38 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
         onTimeUpdate={handleTimeUpdate}
         onLoadedMetadata={handleLoadedMetadata}
         onWaiting={() => setLoading(true)}
-        onCanPlay={() => { setLoading(false); setCanPlay(true); }}
-        onCanPlayThrough={() => { setLoading(false); setCanPlay(true); }}
-        onPlay={() => {
-          setPlaying(true);
+        onCanPlay={() => {
+          setLoading(false);
+          setCanPlay(true);
+          // Auto-fullscreen: fires close to the user's tap — most reliable hook point
           if (!autoFullscreenedRef.current && !document.fullscreenElement) {
             autoFullscreenedRef.current = true;
             const el = containerRef.current;
-            if (el) {
-              (el.requestFullscreen ? el.requestFullscreen() : (el as any).webkitRequestFullscreen?.())
-                ?.catch?.(() => {});
+            const vid = videoRef.current;
+            if (el?.requestFullscreen) {
+              el.requestFullscreen().catch(() => {
+                // Fallback: native video fullscreen for Android WebView / iOS
+                (vid as any)?.webkitEnterFullscreen?.();
+              });
+            } else if ((el as any)?.webkitRequestFullscreen) {
+              (el as any).webkitRequestFullscreen();
+            } else {
+              (vid as any)?.webkitEnterFullscreen?.();
+            }
+          }
+        }}
+        onCanPlayThrough={() => { setLoading(false); setCanPlay(true); }}
+        onPlay={() => {
+          setPlaying(true);
+          // Backup fullscreen attempt in case onCanPlay was too early
+          if (!autoFullscreenedRef.current && !document.fullscreenElement) {
+            autoFullscreenedRef.current = true;
+            const el = containerRef.current;
+            const vid = videoRef.current;
+            if (el?.requestFullscreen) {
+              el.requestFullscreen().catch(() => { (vid as any)?.webkitEnterFullscreen?.(); });
+            } else {
+              (vid as any)?.webkitEnterFullscreen?.();
             }
           }
         }}
