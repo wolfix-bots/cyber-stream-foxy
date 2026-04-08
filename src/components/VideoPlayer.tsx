@@ -53,6 +53,7 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
   const lastTapRef = useRef<number>(0);
   const singleTapTimer = useRef<ReturnType<typeof setTimeout>>();
   const touchHandledRef = useRef(false);
+  const autoFullscreenedRef = useRef(false);
   const controlsTimer = useRef<ReturnType<typeof setTimeout>>();
   const bufferCheckTimer = useRef<ReturnType<typeof setInterval>>();
 
@@ -255,7 +256,17 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
         onWaiting={() => setLoading(true)}
         onCanPlay={() => { setLoading(false); setCanPlay(true); }}
         onCanPlayThrough={() => { setLoading(false); setCanPlay(true); }}
-        onPlay={() => setPlaying(true)}
+        onPlay={() => {
+          setPlaying(true);
+          if (!autoFullscreenedRef.current && !document.fullscreenElement) {
+            autoFullscreenedRef.current = true;
+            const el = containerRef.current;
+            if (el) {
+              (el.requestFullscreen ? el.requestFullscreen() : (el as any).webkitRequestFullscreen?.())
+                ?.catch?.(() => {});
+            }
+          }
+        }}
         onPause={() => setPlaying(false)}
         onProgress={updateBuffered}
         onTouchEnd={(e) => {
