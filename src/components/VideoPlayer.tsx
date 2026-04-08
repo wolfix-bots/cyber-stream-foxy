@@ -50,6 +50,9 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
   const [captionTracks, setCaptionTracks] = useState<CaptionTrack[]>([]);
   const [activeCaptionIdx, setActiveCaptionIdx] = useState<number>(-1);
   const [showCaptionMenu, setShowCaptionMenu] = useState(false);
+  const lastTapRef = useRef<number>(0);
+  const singleTapTimer = useRef<ReturnType<typeof setTimeout>>();
+  const touchHandledRef = useRef(false);
   const controlsTimer = useRef<ReturnType<typeof setTimeout>>();
   const bufferCheckTimer = useRef<ReturnType<typeof setInterval>>();
 
@@ -255,7 +258,34 @@ const VideoPlayer = ({ streams, title, subjectId, streamId, isTV, season, episod
         onPlay={() => setPlaying(true)}
         onPause={() => setPlaying(false)}
         onProgress={updateBuffered}
-        onClick={togglePlay}
+        onTouchEnd={(e) => {
+          touchHandledRef.current = true;
+          const now = Date.now();
+          const since = now - lastTapRef.current;
+          lastTapRef.current = now;
+          if (since < 280 && since > 0) {
+            e.preventDefault();
+            clearTimeout(singleTapTimer.current);
+            lastTapRef.current = 0;
+            toggleFullscreen();
+            showControlsTemporarily();
+          } else {
+            clearTimeout(singleTapTimer.current);
+            singleTapTimer.current = setTimeout(() => {
+              togglePlay();
+              showControlsTemporarily();
+            }, 270);
+          }
+        }}
+        onClick={() => {
+          if (touchHandledRef.current) { touchHandledRef.current = false; return; }
+          togglePlay();
+          showControlsTemporarily();
+        }}
+        onDoubleClick={() => {
+          toggleFullscreen();
+          showControlsTemporarily();
+        }}
         crossOrigin="anonymous"
         playsInline
       >
